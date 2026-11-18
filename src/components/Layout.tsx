@@ -19,7 +19,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="site-footer">
-        Anonymous viewer — no TikTok login. Videos stream through PeekTok (no embeds).
+        Anonymous viewer — no TikTok login. Works on static GitHub Pages (no server).
       </footer>
     </div>
   );

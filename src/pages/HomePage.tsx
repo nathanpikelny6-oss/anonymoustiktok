@@ -36,13 +36,6 @@ export function HomePage() {
       {error && (
         <div className="alert" style={{ marginBottom: 16 }}>
           {error}
-          {/404|failed to fetch/i.test(error) && (
-            <>
-              {" "}
-              If you use GitHub Pages only, deploy on Netlify too or set{" "}
-              <code>VITE_API_BASE</code>.
-            </>
-          )}
         </div>
       )}
       <VideoGrid videos={videos} loading={loading} />

@@ -3,7 +3,6 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router-dom"
 import {
   fetchVideoByUrl,
   formatCount,
-  parseVideoIdFromUrl,
   videoPlayUrl,
 } from "../lib/api";
 import type { VideoSummary } from "../lib/types";
@@ -16,22 +15,24 @@ export function WatchPage() {
   const initial = (location.state as { video?: VideoSummary } | null)?.video;
 
   const [video, setVideo] = useState<VideoSummary | null>(initial ?? null);
-  const [metaLoading, setMetaLoading] = useState(!initial);
+  const [metaLoading, setMetaLoading] = useState(true);
   const [videoLoading, setVideoLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const pageUrl = useMemo(() => {
-    if (video?.url) return video.url;
     if (urlParam) return urlParam;
+    if (video?.url) return video.url;
     if (id) return `https://www.tiktok.com/@tiktok/video/${id}`;
     return "";
-  }, [video?.url, urlParam, id]);
+  }, [urlParam, video?.url, id]);
 
-  const playSrc = pageUrl ? videoPlayUrl(pageUrl) : "";
+  const playSrc = video ? videoPlayUrl(video) : "";
 
   useEffect(() => {
-    if (!pageUrl || video) return;
+    if (!pageUrl) return;
     let cancelled = false;
+    setMetaLoading(true);
+  setError(null);
     (async () => {
       try {
         const res = await fetchVideoByUrl(pageUrl);
@@ -47,11 +48,7 @@ export function WatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [pageUrl, video]);
-
-  useEffect(() => {
-    if (initial) setMetaLoading(false);
-  }, [initial]);
+  }, [pageUrl]);
 
   if (!pageUrl) {
     return <p className="muted">Missing video id.</p>;
@@ -60,25 +57,31 @@ export function WatchPage() {
   return (
     <section className="watch-layout">
       <div>
-        <video
-          className="video-player"
-          controls
-          playsInline
-          preload="metadata"
-          poster={video?.cover}
-          src={playSrc}
-          onLoadStart={() => setVideoLoading(true)}
-          onCanPlay={() => setVideoLoading(false)}
-          onError={() => {
-            setVideoLoading(false);
-            setError(
-              "Video playback failed. The clip may still be preparing — try again in a few seconds.",
-            );
-          }}
-        />
-        {videoLoading && (
+        {playSrc ? (
+          <video
+            className="video-player"
+            controls
+            playsInline
+            preload="metadata"
+            poster={video?.cover}
+            src={playSrc}
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+            onLoadStart={() => setVideoLoading(true)}
+            onCanPlay={() => setVideoLoading(false)}
+            onError={() => {
+              setVideoLoading(false);
+              setError(
+                "Playback failed. TikTok may have blocked this CDN link — try opening the video again.",
+              );
+            }}
+          />
+        ) : (
+          !metaLoading && <p className="muted">No playable stream for this video.</p>
+        )}
+        {videoLoading && playSrc && (
           <p className="muted" style={{ marginTop: 8 }}>
-            Preparing video (first play can take a few seconds)…
+            Loading stream…
           </p>
         )}
       </div>

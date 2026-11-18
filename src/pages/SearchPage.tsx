@@ -49,7 +49,9 @@ export function SearchPage() {
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
           {source === "user-feed" &&
-            " (matched a public @username — showing their recent videos)"}
+            " (matched @username — showing their recent videos)"}
+          {source === "seed-resolve" &&
+            " (using bundled seed videos when TikWM feed is unavailable)"}
         </p>
       )}
       {error && <div className="alert">{error}</div>}

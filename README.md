@@ -1,61 +1,51 @@
 # PeekTok — Anonymous TikTok Viewer
 
-Static React app for browsing and watching TikTok **without logging in**. Video playback uses an HTML5 `<video>` player with MP4 streams proxied by the Netlify API (no TikTok iframes).
+Static React app for browsing and watching TikTok **without logging in**. Designed for **GitHub Pages only** — no Netlify, no API keys, no env vars.
+
+**Live URL:** `https://nathanpikelny6-oss.github.io/anonymoustiktok/`
 
 ## Features
 
-- Search by keyword, `@username`, or pasted TikTok URL
-- Creator profiles and recent videos
-- Discover feed (latest from [@tiktok](https://www.tiktok.com/@tiktok))
-- Dark, mobile-friendly UI
+- Discover feed, search, profiles, and watch pages
+- HTML5 `<video>` playback (no TikTok iframes)
+- Works entirely in the browser on GitHub Pages
 
 ## How it works
 
-TikTok blocks direct browser calls to their API (CORS + bot protection). This repo ships a **small serverless API** (Netlify Functions) that:
+The frontend calls the public [TikWM](https://www.tikwm.com/) JSON API (CORS-enabled) from the browser to resolve video metadata and MP4 links. Discover tries `@tiktok`’s feed first; if that fails, it loads `public/seeds.json` and resolves each link.
 
-1. Fetches public metadata with a standalone [`yt-dlp_linux`](https://github.com/yt-dlp/yt-dlp/releases) binary (downloaded at Netlify build time; user feeds + listings)
-2. Reads creator profile stats from TikTok’s public HTML
-3. Resolves keyword search via matching `@username` feeds or filtering the discover feed (TikTok’s signed search API is blocked from most cloud hosts)
-
-The frontend is a Vite + React SPA that builds to static files in `dist/`.
+TikWM is a third-party service — not affiliated with TikTok or this project.
 
 ## Local development
 
 ```bash
 npm install
-npm run dev          # frontend only (API calls need Netlify Dev)
-npm run netlify:dev  # downloads yt-dlp + functions at /api/*
+npm run dev
 ```
 
-## Deploy on Netlify (recommended — frontend + API)
+Open `http://localhost:5173`.
 
-1. Import this repository in [Netlify](https://app.netlify.com/).
-2. Build settings are in `netlify.toml` (`npm run build`, publish `dist`, functions in `netlify/functions`).
-3. Deploy. The site uses same-origin `/api/*` redirects — no extra env vars required.
+## Deploy to GitHub Pages
 
-## Deploy on GitHub Pages (static only)
+1. Push to `main` (workflow `.github/workflows/pages.yml` builds with `GITHUB_PAGES=true`).
+2. In the repo: **Settings → Pages → Build and deployment → GitHub Actions**.
+3. Visit `https://<user>.github.io/<repo>/`.
 
-**Site URL:** `https://nathanpikelny6-oss.github.io/anonymoustiktok/` (not the bare `*.github.io` root).
-
-GitHub Pages serves the built SPA. You still need the API hosted somewhere (e.g. the same repo on Netlify):
-
-1. Enable GitHub Pages for the repository (workflow in `.github/workflows/pages.yml`).
-2. In the repo **Settings → Secrets and variables → Actions**, set variable `VITE_API_BASE` to your Netlify site URL (e.g. `https://your-site.netlify.app`) so the static build can reach `/api`.
-
-Without `VITE_API_BASE`, the UI loads but discover/search/profile calls will fail on GitHub Pages alone.
+No `VITE_API_BASE` or other secrets.
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Production build to `dist/` |
-| `npx netlify dev` | Local dev with API |
+| Command       | Description        |
+|---------------|--------------------|
+| `npm run dev` | Vite dev server    |
+| `npm run build` | Production build |
+
+## Optional Netlify folder
+
+The `netlify/` directory is legacy (server + yt-dlp). GitHub Pages deploys **do not** use it.
 
 ## Privacy
 
-This project does not use TikTok login cookies from visitors. Server-side requests only fetch public pages/embeds. TikTok may still apply their normal embed analytics when you play a video.
-
-## License
+No TikTok login. Metadata/video URLs are fetched via TikWM from the client. TikTok may log CDN requests as usual.
 
 MIT — unofficial tool, not affiliated with TikTok / ByteDance.

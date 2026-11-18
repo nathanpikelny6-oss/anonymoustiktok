@@ -11,6 +11,8 @@ export interface VideoSummary {
   shareCount?: number;
   duration?: number;
   url: string;
+  /** Direct MP4 from TikWM (client-side, no backend). */
+  playUrl?: string;
 }
 
 export interface UserSummary {
