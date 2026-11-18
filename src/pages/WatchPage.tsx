@@ -4,7 +4,7 @@ import {
   fetchVideoByUrl,
   formatCount,
   parseVideoIdFromUrl,
-  videoEmbedUrl,
+  videoPlayUrl,
 } from "../lib/api";
 import type { VideoSummary } from "../lib/types";
 
@@ -16,61 +16,74 @@ export function WatchPage() {
   const initial = (location.state as { video?: VideoSummary } | null)?.video;
 
   const [video, setVideo] = useState<VideoSummary | null>(initial ?? null);
-  const [loading, setLoading] = useState(!initial);
+  const [metaLoading, setMetaLoading] = useState(!initial);
+  const [videoLoading, setVideoLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const embedId = useMemo(() => {
-    if (id) return id;
-    return urlParam ? parseVideoIdFromUrl(urlParam) : null;
-  }, [id, urlParam]);
+  const pageUrl = useMemo(() => {
+    if (video?.url) return video.url;
+    if (urlParam) return urlParam;
+    if (id) return `https://www.tiktok.com/@tiktok/video/${id}`;
+    return "";
+  }, [video?.url, urlParam, id]);
+
+  const playSrc = pageUrl ? videoPlayUrl(pageUrl) : "";
 
   useEffect(() => {
-    if (video || !embedId) return;
-    const url =
-      urlParam ||
-      `https://www.tiktok.com/@tiktok/video/${embedId}`;
+    if (!pageUrl || video) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchVideoByUrl(url);
+        const res = await fetchVideoByUrl(pageUrl);
         if (!cancelled) setVideo(res.video);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Could not load video");
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setMetaLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [video, embedId, urlParam]);
+  }, [pageUrl, video]);
 
   useEffect(() => {
-    if (initial) setLoading(false);
+    if (initial) setMetaLoading(false);
   }, [initial]);
 
-  const playerId = embedId ?? video?.id;
-
-  if (!playerId) {
+  if (!pageUrl) {
     return <p className="muted">Missing video id.</p>;
   }
 
   return (
     <section className="watch-layout">
       <div>
-        <iframe
-          className="embed-frame"
-          title="TikTok video player"
-          src={videoEmbedUrl(playerId)}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
+        <video
+          className="video-player"
+          controls
+          playsInline
+          preload="metadata"
+          poster={video?.cover}
+          src={playSrc}
+          onLoadStart={() => setVideoLoading(true)}
+          onCanPlay={() => setVideoLoading(false)}
+          onError={() => {
+            setVideoLoading(false);
+            setError(
+              "Video playback failed. The clip may still be preparing — try again in a few seconds.",
+            );
+          }}
         />
+        {videoLoading && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            Preparing video (first play can take a few seconds)…
+          </p>
+        )}
       </div>
       <div className="panel">
-        {loading && <p className="muted">Loading details…</p>}
+        {metaLoading && <p className="muted">Loading details…</p>}
         {error && <div className="alert">{error}</div>}
         {video && (
           <>

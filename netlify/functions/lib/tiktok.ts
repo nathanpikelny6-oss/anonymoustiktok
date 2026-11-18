@@ -1,4 +1,8 @@
-import { fetchUserFeed, type YtDlpVideo } from "./ytdlp.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fetchUserFeed, YTDLP, type YtDlpVideo } from "./ytdlp.js";
+
+const execFileAsync = promisify(execFile);
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -137,9 +141,26 @@ export async function loadUserVideos(
   return items.map(mapYtDlp);
 }
 
+async function dumpSingleVideo(pageUrl: string): Promise<YtDlpVideo | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      YTDLP,
+      ["--no-warnings", "--dump-json", pageUrl],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 60_000 },
+    );
+    return JSON.parse(stdout.trim()) as YtDlpVideo;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveVideo(url: string): Promise<VideoSummary | null> {
-  const id = url.match(/video\/(\d+)/)?.[1];
-  const username = url.match(/@([^/]+)/)?.[1];
+  const pageUrl = url.startsWith("http") ? url : `https://www.tiktok.com${url}`;
+  const full = await dumpSingleVideo(pageUrl);
+  if (full) return mapYtDlp(full);
+
+  const id = pageUrl.match(/video\/(\d+)/)?.[1];
+  const username = pageUrl.match(/@([^/]+)/)?.[1];
 
   if (username && id) {
     const feed = await fetchUserFeed(username, 80);
@@ -153,9 +174,7 @@ export async function resolveVideo(url: string): Promise<VideoSummary | null> {
       desc: "",
       authorUsername: username ?? "unknown",
       authorNickname: username ?? "unknown",
-      url: url.startsWith("http")
-        ? url
-        : `https://www.tiktok.com/@${username ?? "user"}/video/${id}`,
+      url: pageUrl,
     };
   }
 

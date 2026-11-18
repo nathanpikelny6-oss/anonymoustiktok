@@ -51,8 +51,9 @@ export async function fetchVideoByUrl(url: string): Promise<{ video: VideoSummar
   return getJson("/video", { url });
 }
 
-export function videoEmbedUrl(id: string): string {
-  return `https://www.tiktok.com/embed/v2/${id}`;
+/** Proxied MP4 play URL (no TikTok iframe). */
+export function videoPlayUrl(tiktokPageUrl: string): string {
+  return apiUrl("/play", { url: tiktokPageUrl }).toString();
 }
 
 export function parseVideoIdFromUrl(url: string): string | null {

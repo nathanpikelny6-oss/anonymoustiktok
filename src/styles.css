@@ -263,12 +263,13 @@ input {
   }
 }
 
-.embed-frame {
+.video-player {
   width: 100%;
-  border: 0;
+  max-height: min(85vh, 920px);
   border-radius: 12px;
-  min-height: 580px;
   background: #000;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
 }
 
 .alert {

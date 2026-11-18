@@ -1,4 +1,5 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
+import { serveVideoPlay } from "./lib/play.js";
 import {
   loadUser,
   loadUserVideos,
@@ -77,8 +78,12 @@ export const handler: Handler = async (event) => {
         });
       }
 
-      const { items, source } = await searchVideos(parsed.value, 1);
+      const { items, source } = await searchVideos(parsed.value);
       return json(200, { items, source });
+    }
+
+    if (path === "/play") {
+      return serveVideoPlay(event);
     }
 
     if (path === "/video") {

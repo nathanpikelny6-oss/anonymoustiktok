@@ -1,6 +1,6 @@
 # PeekTok — Anonymous TikTok Viewer
 
-Static React app for browsing and watching TikTok **without logging in**. Video playback uses TikTok’s official embed player.
+Static React app for browsing and watching TikTok **without logging in**. Video playback uses an HTML5 `<video>` player with MP4 streams proxied by the Netlify API (no TikTok iframes).
 
 ## Features
 
