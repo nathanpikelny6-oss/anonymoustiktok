@@ -35,6 +35,8 @@ npx netlify dev      # frontend + functions at /api/*
 
 ## Deploy on GitHub Pages (static only)
 
+**Site URL:** `https://nathanpikelny6-oss.github.io/anonymoustiktok/` (not the bare `*.github.io` root).
+
 GitHub Pages serves the built SPA. You still need the API hosted somewhere (e.g. the same repo on Netlify):
 
 1. Enable GitHub Pages for the repository (workflow in `.github/workflows/pages.yml`).
