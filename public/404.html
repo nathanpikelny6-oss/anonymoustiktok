@@ -1,14 +1,33 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0;url=./" />
+    <meta charset="utf-8" />
+    <title>PeekTok</title>
     <script>
-      location.replace(
-        "./" + location.search + location.hash,
+      // GitHub Pages SPA fallback (project site: /anonymoustiktok/)
+      var pathSegmentsToKeep = 1;
+      var l = window.location;
+      l.replace(
+        l.protocol +
+          "//" +
+          l.hostname +
+          (l.port ? ":" + l.port : "") +
+          l.pathname
+            .split("/")
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join("/") +
+          "/?p=" +
+          decodeURIComponent(
+            l.pathname
+              .split("/")
+              .slice(1 + pathSegmentsToKeep)
+              .join("/")
+              .replace(/&/g, "~and~") +
+              l.search +
+              l.hash,
+          ),
       );
     </script>
-    <title>PeekTok</title>
   </head>
   <body></body>
 </html>

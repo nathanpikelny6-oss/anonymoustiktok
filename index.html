@@ -12,6 +12,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // GitHub Pages SPA redirect from 404.html
+      (function () {
+        var p = new URLSearchParams(location.search).get("p");
+        if (!p) return;
+        var base =
+          location.pathname.split("/").filter(Boolean)[0] || "";
+        var prefix = base ? "/" + base : "";
+        history.replaceState(null, "", prefix + p.replace(/~and~/g, "&"));
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
