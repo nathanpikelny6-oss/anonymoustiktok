@@ -12,7 +12,7 @@ Static React app for browsing and watching TikTok **without logging in**. Design
 
 ## How it works
 
-The frontend calls the public [TikWM](https://www.tikwm.com/) JSON API (CORS-enabled) from the browser to resolve video metadata and MP4 links. Discover tries `@tiktok`’s feed first; if that fails, it loads `public/seeds.json` and resolves each link.
+The frontend calls the public [TikWM](https://www.tikwm.com/) JSON API (CORS-enabled) from the browser to resolve video metadata and MP4 links. On deploy, CI runs `scripts/build-discover.mjs` to bake a static `discover.json` so the home feed works even when live TikWM calls fail in the browser. Watch/search still resolve via TikWM at click time.
 
 TikWM is a third-party service — not affiliated with TikTok or this project.
 

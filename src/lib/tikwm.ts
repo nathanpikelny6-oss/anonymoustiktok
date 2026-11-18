@@ -155,7 +155,24 @@ export function parseTikTokInput(raw: string): {
   return { kind: "keyword", value: trimmed };
 }
 
+async function loadBundledDiscover(): Promise<VideoSummary[]> {
+  const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+  const res = await fetch(`${base}discover.json`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`discover.json (${res.status})`);
+  const items = (await res.json()) as VideoSummary[];
+  return items.filter((v) => v.id && v.playUrl);
+}
+
 export async function fetchTrending(): Promise<SearchResponse> {
+  try {
+    const bundled = await loadBundledDiscover();
+    if (bundled.length) {
+      return { items: bundled, source: "bundled" };
+    }
+  } catch {
+    /* try live fallbacks */
+  }
+
   try {
     const items = await fetchUserPosts("tiktok", 18);
     return { items, source: "tikwm-feed" };

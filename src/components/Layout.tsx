@@ -19,7 +19,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="site-footer">
-        Anonymous viewer — no TikTok login. Works on static GitHub Pages (no server).
+        Anonymous viewer — no login. GitHub Pages · no backend (v3).
       </footer>
     </div>
   );
