@@ -5,6 +5,8 @@ export interface VideoSummary {
   authorNickname: string;
   authorAvatar?: string;
   cover?: string;
+  /** Same-origin thumbnail baked at deploy time (public/covers/). */
+  coverLocal?: string;
   playCount?: number;
   likeCount?: number;
   commentCount?: number;

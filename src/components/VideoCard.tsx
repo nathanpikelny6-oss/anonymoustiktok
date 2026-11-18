@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import type { VideoSummary } from "../lib/types";
 import { formatCount } from "../lib/api";
+import { thumbnailUrl } from "../lib/thumb";
 
 export function VideoCard({ video }: { video: VideoSummary }) {
+  const thumb = thumbnailUrl(video);
+
   return (
     <Link
       className="video-card"
@@ -11,8 +14,18 @@ export function VideoCard({ video }: { video: VideoSummary }) {
       title={video.desc || video.url}
     >
       <div className="thumb-wrap">
-        {video.cover ? (
-          <img src={video.cover} alt="" loading="lazy" />
+        {thumb ? (
+          <img
+            src={thumb}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              if (video.cover && e.currentTarget.src !== video.cover) {
+                e.currentTarget.src = video.cover;
+              }
+            }}
+          />
         ) : (
           <div className="thumb-fallback">Tap to watch</div>
         )}

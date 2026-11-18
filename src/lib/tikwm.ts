@@ -1,4 +1,5 @@
 import type { SearchResponse, UserSummary, VideoSummary } from "./types";
+import { findTikTokVideoUrls, findUserVideoUrls } from "./webDiscovery";
 
 const TIKWM_API = "https://www.tikwm.com/api";
 
@@ -122,10 +123,57 @@ export async function fetchUserInfo(
 }
 
 export async function searchVideos(keyword: string): Promise<VideoSummary[]> {
+  const params = new URLSearchParams({
+    keywords: keyword,
+    count: "24",
+    cursor: "0",
+    web: "1",
+    hd: "1",
+  });
+  const post = await fetch(`${TIKWM_API}/feed/search`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: params,
+  });
+  if (post.ok) {
+    const body = (await post.json()) as TikwmEnvelope<{ videos?: TikwmVideo[] }>;
+    if (body.code === 0 && body.data?.videos?.length) {
+      return body.data.videos.map((v) => mapVideo(v));
+    }
+  }
+
   const data = await tikwmRequest<{ videos?: TikwmVideo[] }>(
     `${TIKWM_API}/feed/search?keywords=${encodeURIComponent(keyword)}&count=24&cursor=0`,
   );
   return (data.videos ?? []).map((v) => mapVideo(v));
+}
+
+async function resolveMany(urls: string[], concurrency = 4): Promise<VideoSummary[]> {
+  const results: VideoSummary[] = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < urls.length) {
+      const i = index++;
+      const url = urls[i];
+      try {
+        results.push(await resolveVideoUrl(url));
+      } catch {
+        /* skip bad links */
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, urls.length) }, () => worker()),
+  );
+  return results;
+}
+
+export async function searchVideosViaWeb(keyword: string): Promise<VideoSummary[]> {
+  const urls = await findTikTokVideoUrls(keyword, 16);
+  if (!urls.length) return [];
+  return resolveMany(urls);
 }
 
 async function loadSeedDiscover(): Promise<VideoSummary[]> {
@@ -149,8 +197,8 @@ export function parseTikTokInput(raw: string): {
   if (/tiktok\.com/i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
     return { kind: "url", value: trimmed };
   }
-  if (/^@?[a-zA-Z0-9._]{2,30}$/.test(trimmed)) {
-    return { kind: "username", value: trimmed.replace(/^@/, "") };
+  if (/^@([a-zA-Z0-9._]{2,30})$/.test(trimmed)) {
+    return { kind: "username", value: trimmed.slice(1) };
   }
   return { kind: "keyword", value: trimmed };
 }
@@ -194,38 +242,68 @@ export async function searchQuery(q: string): Promise<SearchResponse> {
   }
 
   if (parsed.kind === "username") {
-    const user = await fetchUserInfo(parsed.value);
-    let items: VideoSummary[] = [];
-    try {
-      items = await fetchUserPosts(parsed.value, 24);
-    } catch {
-      items = [];
-    }
-    return { user, items, source: "profile" };
+    return fetchUser(parsed.value)
+      .then(({ user, items }) => ({
+        user,
+        items,
+        source: items.length ? "profile" : "empty",
+      }))
+      .catch(() => ({ items: [], source: "empty" as const }));
   }
 
   try {
     const items = await searchVideos(parsed.value);
     if (items.length) return { items, source: "tikwm-search" };
   } catch {
-    /* fallback below */
+    /* TikWM search often blocked in the browser */
   }
 
   try {
-    const items = await fetchUserPosts(parsed.value, 24);
-    const user = await fetchUserInfo(parsed.value);
-    return { user, items, source: "user-feed" };
+    const items = await searchVideosViaWeb(parsed.value);
+    if (items.length) return { items, source: "web-search" };
   } catch {
-    return { items: [], source: "empty" };
+    /* show empty */
   }
+
+  return { items: [], source: "empty" };
 }
 
 export async function fetchUser(username: string): Promise<{
   user: UserSummary;
   items: VideoSummary[];
 }> {
-  const user = await fetchUserInfo(username);
-  if (!user) throw new Error("User not found");
-  const items = await fetchUserPosts(username, 24);
+  let user = await fetchUserInfo(username);
+  let items: VideoSummary[] = [];
+
+  try {
+    items = await fetchUserPosts(username, 24);
+  } catch {
+    items = [];
+  }
+
+  if (!items.length) {
+    const urls = await findUserVideoUrls(username, 20);
+    items = await resolveMany(urls);
+    if (!user && items.length) {
+      const first = items[0];
+      user = {
+        username: first.authorUsername,
+        nickname: first.authorNickname,
+        avatar: first.authorAvatar,
+      };
+    }
+  }
+
+  if (!user) {
+    user = {
+      username,
+      nickname: username,
+    };
+  }
+
+  if (!items.length && !user.avatar) {
+    throw new Error("User not found");
+  }
+
   return { user, items };
 }

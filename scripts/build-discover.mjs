@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = dirname(fileURLToPath(import.meta.url + "/.."));
 const seedsPath = join(root, "public/seeds.json");
 const outPath = join(root, "public/discover.json");
+const coversDir = join(root, "public/covers");
+mkdirSync(coversDir, { recursive: true });
 
 const seeds = JSON.parse(readFileSync(seedsPath, "utf8"));
 
@@ -29,15 +31,33 @@ function mapVideo(data, pageUrl) {
   };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const items = [];
 for (const url of seeds) {
   try {
+    if (items.length) await sleep(1200);
     const res = await fetch(
       `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`,
     );
     const body = await res.json();
     if (body.code === 0 && body.data) {
-      items.push(mapVideo(body.data, url));
+      const item = mapVideo(body.data, url);
+      const coverUrl = item.cover;
+      if (coverUrl && item.id) {
+        try {
+          const imgRes = await fetch(coverUrl);
+          if (imgRes.ok) {
+            const buf = Buffer.from(await imgRes.arrayBuffer());
+            const rel = `covers/${item.id}.jpg`;
+            writeFileSync(join(root, "public", rel), buf);
+            item.coverLocal = rel;
+          }
+        } catch (err) {
+          console.warn("thumb", item.id, err.message);
+        }
+      }
+      items.push(item);
       console.log("ok", idFromUrl(url));
     } else {
       console.warn("skip", url, body.msg);

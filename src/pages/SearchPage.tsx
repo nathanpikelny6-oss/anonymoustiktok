@@ -48,8 +48,8 @@ export function SearchPage() {
       {source && (
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
-          {source === "user-feed" &&
-            " (matched @username — showing their recent videos)"}
+          {source === "web-search" &&
+            " (found via web search, then resolved in your browser)"}
           {source === "seed-resolve" &&
             " (using bundled seed videos when TikWM feed is unavailable)"}
         </p>
