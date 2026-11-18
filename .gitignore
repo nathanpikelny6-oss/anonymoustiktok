@@ -1,5 +1,6 @@
 node_modules
 dist
 .netlify
+netlify/functions-bin/yt-dlp
 .DS_Store
 *.local

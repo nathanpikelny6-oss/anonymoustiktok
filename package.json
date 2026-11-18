@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "netlify:dev": "netlify dev"
+    "netlify:dev": "bash scripts/prepare-ytdlp.sh && netlify dev",
+    "prepare:ytdlp": "bash scripts/prepare-ytdlp.sh"
   },
   "dependencies": {
     "@netlify/functions": "^2.8.2",

@@ -13,7 +13,7 @@ Static React app for browsing and watching TikTok **without logging in**. Video 
 
 TikTok blocks direct browser calls to their API (CORS + bot protection). This repo ships a **small serverless API** (Netlify Functions) that:
 
-1. Fetches public metadata with bundled [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (user feeds + video listings)
+1. Fetches public metadata with a standalone [`yt-dlp_linux`](https://github.com/yt-dlp/yt-dlp/releases) binary (downloaded at Netlify build time; user feeds + listings)
 2. Reads creator profile stats from TikTok’s public HTML
 3. Resolves keyword search via matching `@username` feeds or filtering the discover feed (TikTok’s signed search API is blocked from most cloud hosts)
 
@@ -24,7 +24,7 @@ The frontend is a Vite + React SPA that builds to static files in `dist/`.
 ```bash
 npm install
 npm run dev          # frontend only (API calls need Netlify Dev)
-npx netlify dev      # frontend + functions at /api/*
+npm run netlify:dev  # downloads yt-dlp + functions at /api/*
 ```
 
 ## Deploy on Netlify (recommended — frontend + API)
