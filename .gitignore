@@ -1,5 +1,6 @@
 node_modules
 dist
+.vite
 .netlify
 netlify/functions-bin/yt-dlp
 .DS_Store
