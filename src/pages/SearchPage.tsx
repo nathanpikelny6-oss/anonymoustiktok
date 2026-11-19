@@ -18,9 +18,17 @@ export function SearchPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setVideos([]);
     (async () => {
       try {
-        const res = await searchQuery(q);
+        const res = await searchQuery(q, {
+          onVideo: (video) => {
+            if (cancelled) return;
+            setVideos((prev) =>
+              prev.some((p) => p.id === video.id) ? prev : [...prev, video],
+            );
+          },
+        });
         if (cancelled) return;
         setVideos(res.items ?? []);
         setUser(res.user ?? null);
@@ -45,7 +53,12 @@ export function SearchPage() {
   return (
     <section>
       <h1 className="section-title">Results for “{q}”</h1>
-      {source && (
+      {loading && (
+        <p className="muted" style={{ marginTop: 0 }}>
+          Resolving videos… this can take up to a minute (TikWM rate limits).
+        </p>
+      )}
+      {source && !loading && (
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
           {source === "web-search" &&
@@ -74,7 +87,7 @@ export function SearchPage() {
           </div>
         </div>
       )}
-      <VideoGrid videos={videos} loading={loading} />
+      <VideoGrid videos={videos} loading={loading && videos.length === 0} />
     </section>
   );
 }

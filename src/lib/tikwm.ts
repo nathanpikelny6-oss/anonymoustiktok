@@ -148,45 +148,55 @@ export async function searchVideos(keyword: string): Promise<VideoSummary[]> {
   return (data.videos ?? []).map((v) => mapVideo(v));
 }
 
-async function resolveMany(urls: string[], concurrency = 4): Promise<VideoSummary[]> {
-  const results: VideoSummary[] = [];
-  let index = 0;
+const TIKWM_DELAY_MS = 1100;
 
-  async function worker() {
-    while (index < urls.length) {
-      const i = index++;
-      const url = urls[i];
-      try {
-        results.push(await resolveVideoUrl(url));
-      } catch {
-        /* skip bad links */
-      }
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type ResolveHandlers = {
+  onVideo?: (video: VideoSummary) => void;
+};
+
+/** TikWM free tier allows ~1 request/sec; parallel calls fail with rate limits. */
+async function resolveMany(
+  urls: string[],
+  handlers?: ResolveHandlers,
+): Promise<VideoSummary[]> {
+  const results: VideoSummary[] = [];
+  const seenIds = new Set<string>();
+
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const video = await resolveVideoUrl(urls[i]);
+      if (seenIds.has(video.id)) continue;
+      seenIds.add(video.id);
+      results.push(video);
+      handlers?.onVideo?.(video);
+    } catch {
+      /* skip bad links / rate limits */
+    }
+    if (i < urls.length - 1) {
+      await sleep(TIKWM_DELAY_MS);
     }
   }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, urls.length) }, () => worker()),
-  );
   return results;
 }
 
-export async function searchVideosViaWeb(keyword: string): Promise<VideoSummary[]> {
-  const urls = await findTikTokVideoUrls(keyword, 16);
+export async function searchVideosViaWeb(
+  keyword: string,
+  handlers?: ResolveHandlers,
+): Promise<VideoSummary[]> {
+  const urls = await findTikTokVideoUrls(keyword, 12);
   if (!urls.length) return [];
-  return resolveMany(urls);
+  return resolveMany(urls, handlers);
 }
 
 async function loadSeedDiscover(): Promise<VideoSummary[]> {
   const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
   const res = await fetch(`${base}seeds.json`);
   const urls = (await res.json()) as string[];
-  const batch = urls.slice(0, 12);
-  const results = await Promise.all(
-    batch.map((url) =>
-      resolveVideoUrl(url).catch(() => null),
-    ),
-  );
-  return results.filter((v): v is VideoSummary => v !== null);
+  return resolveMany(urls.slice(0, 12));
 }
 
 export function parseTikTokInput(raw: string): {
@@ -233,7 +243,10 @@ export async function fetchTrending(): Promise<SearchResponse> {
   }
 }
 
-export async function searchQuery(q: string): Promise<SearchResponse> {
+export async function searchQuery(
+  q: string,
+  handlers?: ResolveHandlers,
+): Promise<SearchResponse> {
   const parsed = parseTikTokInput(q);
 
   if (parsed.kind === "url") {
@@ -242,7 +255,7 @@ export async function searchQuery(q: string): Promise<SearchResponse> {
   }
 
   if (parsed.kind === "username") {
-    return fetchUser(parsed.value)
+    return fetchUser(parsed.value, handlers)
       .then(({ user, items }) => ({
         user,
         items,
@@ -259,7 +272,7 @@ export async function searchQuery(q: string): Promise<SearchResponse> {
   }
 
   try {
-    const items = await searchVideosViaWeb(parsed.value);
+    const items = await searchVideosViaWeb(parsed.value, handlers);
     if (items.length) return { items, source: "web-search" };
   } catch {
     /* show empty */
@@ -268,7 +281,10 @@ export async function searchQuery(q: string): Promise<SearchResponse> {
   return { items: [], source: "empty" };
 }
 
-export async function fetchUser(username: string): Promise<{
+export async function fetchUser(
+  username: string,
+  handlers?: ResolveHandlers,
+): Promise<{
   user: UserSummary;
   items: VideoSummary[];
 }> {
@@ -282,8 +298,8 @@ export async function fetchUser(username: string): Promise<{
   }
 
   if (!items.length) {
-    const urls = await findUserVideoUrls(username, 20);
-    items = await resolveMany(urls);
+    const urls = await findUserVideoUrls(username, 12);
+    items = await resolveMany(urls, handlers);
     if (!user && items.length) {
       const first = items[0];
       user = {
