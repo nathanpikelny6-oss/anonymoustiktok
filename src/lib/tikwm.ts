@@ -1,5 +1,9 @@
 import type { SearchResponse, UserSummary, VideoSummary } from "./types";
-import { findTikTokVideoUrls, findUserVideoUrls } from "./webDiscovery";
+import {
+  findTikTokVideoStubs,
+  findUserVideoUrls,
+  type VideoStub,
+} from "./webDiscovery";
 
 const TIKWM_API = "https://www.tikwm.com/api";
 
@@ -183,13 +187,30 @@ async function resolveMany(
   return results;
 }
 
+function stubToVideo(stub: VideoStub): VideoSummary {
+  const match = stub.url.match(/@([^/]+)\/video\/(\d+)/);
+  const username = match?.[1] ?? "unknown";
+  const id = match?.[2] ?? "";
+  return {
+    id,
+    url: stub.url,
+    desc: stub.desc || "TikTok video",
+    authorUsername: username,
+    authorNickname: username,
+  };
+}
+
 export async function searchVideosViaWeb(
   keyword: string,
   handlers?: ResolveHandlers,
 ): Promise<VideoSummary[]> {
-  const urls = await findTikTokVideoUrls(keyword, 12);
-  if (!urls.length) return [];
-  return resolveMany(urls, handlers);
+  const stubs = await findTikTokVideoStubs(keyword, 16);
+  const items = stubs.map((stub) => {
+    const video = stubToVideo(stub);
+    handlers?.onVideo?.(video);
+    return video;
+  });
+  return items;
 }
 
 async function loadSeedDiscover(): Promise<VideoSummary[]> {
@@ -298,8 +319,9 @@ export async function fetchUser(
   }
 
   if (!items.length) {
-    const urls = await findUserVideoUrls(username, 12);
-    items = await resolveMany(urls, handlers);
+    const urls = await findUserVideoUrls(username, 16);
+    items = urls.map((url) => stubToVideo({ url, desc: "" }));
+    for (const video of items) handlers?.onVideo?.(video);
     if (!user && items.length) {
       const first = items[0];
       user = {

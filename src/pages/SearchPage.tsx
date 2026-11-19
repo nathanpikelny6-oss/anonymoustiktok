@@ -55,14 +55,14 @@ export function SearchPage() {
       <h1 className="section-title">Results for “{q}”</h1>
       {loading && (
         <p className="muted" style={{ marginTop: 0 }}>
-          Resolving videos… this can take up to a minute (TikWM rate limits).
+          Searching the web for TikTok links…
         </p>
       )}
       {source && !loading && (
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
           {source === "web-search" &&
-            " (found via web search, then resolved in your browser)"}
+            " (links from web search — playback loads when you open a video)"}
           {source === "seed-resolve" &&
             " (using bundled seed videos when TikWM feed is unavailable)"}
         </p>

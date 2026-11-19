@@ -19,7 +19,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="site-footer">
-        Anonymous viewer — no login. GitHub Pages · no backend (v5).
+        Anonymous viewer — no login. GitHub Pages · no backend (v6).
       </footer>
     </div>
   );
