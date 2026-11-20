@@ -1,5 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 import { SearchBar } from "./SearchBar";
+import { SourceSwitch } from "./SourceSwitch";
 
 export function Layout() {
   return (
@@ -14,12 +15,13 @@ export function Layout() {
           </Link>
           <SearchBar compact />
         </div>
+        <SourceSwitch />
       </header>
       <main className="main-content">
         <Outlet />
       </main>
       <footer className="site-footer">
-        Anonymous viewer — no login. GitHub Pages · no backend (v8).
+        Anonymous viewer — no login. GitHub Pages · no backend (v9).
       </footer>
     </div>
   );

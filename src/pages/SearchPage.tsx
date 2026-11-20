@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { searchQuery } from "../lib/api";
+import { readSearchProvider } from "../lib/providers";
 import type { UserSummary, VideoSummary } from "../lib/types";
 import { VideoGrid } from "../components/VideoGrid";
 
@@ -12,6 +13,13 @@ export function SearchPage() {
   const [source, setSource] = useState<string | undefined>();
   const [loading, setLoading] = useState(Boolean(q));
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState(() => readSearchProvider());
+
+  useEffect(() => {
+    const sync = () => setProvider(readSearchProvider());
+    window.addEventListener("peektok-provider", sync);
+    return () => window.removeEventListener("peektok-provider", sync);
+  }, []);
 
   useEffect(() => {
     if (!q) return;
@@ -23,10 +31,11 @@ export function SearchPage() {
       try {
         let streamed = false;
         const res = await searchQuery(q, {
-          onResults: (items) => {
+          onResults: (items, nextSource) => {
             if (cancelled || !items.length) return;
             streamed = true;
             setVideos(items);
+            if (nextSource) setSource(nextSource);
             setLoading(false);
           },
         });
@@ -45,7 +54,7 @@ export function SearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [q]);
+  }, [q, provider]);
 
   if (!q) {
     return <p className="muted">Enter a search query above.</p>;
@@ -62,8 +71,10 @@ export function SearchPage() {
       {source && !loading && (
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
-          {source === "relevance" &&
-            " · sorted by relevance (caption match and popularity)"}
+          {source === "hashtag" && " · TikWM hashtag feed"}
+          {source === "web" && " · web index of TikTok links"}
+          {source === "auto" &&
+            " · TikWM hashtags first, web search if that feed is short"}
           {source === "seed-resolve" &&
             " (using bundled seed videos when TikWM feed is unavailable)"}
         </p>

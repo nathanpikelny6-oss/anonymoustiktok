@@ -127,6 +127,29 @@ input {
   background: var(--accent-dim);
 }
 
+.source-switch {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 18px 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.source-switch button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.source-switch button.is-active {
+  color: white;
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--border);

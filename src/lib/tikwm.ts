@@ -5,6 +5,7 @@ import {
   type VideoStub,
 } from "./webDiscovery";
 import { dedupeVideos, sortByRelevance } from "./relevance";
+import { readSearchProvider, type SearchProvider } from "./providers";
 
 const TIKWM_API = "https://www.tikwm.com/api";
 
@@ -127,24 +128,53 @@ export async function fetchUserInfo(
   }
 }
 
-export async function searchVideos(keyword: string): Promise<VideoSummary[]> {
-  const params = new URLSearchParams({
-    keywords: keyword,
-    count: "30",
-    cursor: "0",
-    web: "1",
-    hd: "1",
-  });
-  const post = await fetch(`${TIKWM_API}/feed/search`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    body: params,
-    signal: AbortSignal.timeout(6000),
-  });
-  if (!post.ok) return [];
-  const body = (await post.json()) as TikwmEnvelope<{ videos?: TikwmVideo[] }>;
-  if (body.code !== 0 || !body.data?.videos?.length) return [];
-  return body.data.videos.map((v) => mapVideo(v));
+type ChallengeHit = {
+  id?: string;
+  cha_name?: string;
+  view_count?: number;
+};
+
+function hashtagScore(name: string, keyword: string): number {
+  const tag = name.toLowerCase();
+  const compact = keyword.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const words = keyword
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 1);
+  let score = 0;
+  if (tag === compact) score += 20;
+  if (compact && tag.includes(compact)) score += 8;
+  for (const word of words) {
+    if (tag.includes(word)) score += 4;
+  }
+  return score;
+}
+
+/** TikWM hashtag feed. Browser-friendly, includes covers and MP4 links. */
+export async function searchHashtagVideos(keyword: string): Promise<VideoSummary[]> {
+  const compact = keyword.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const queries = [...new Set([compact, keyword.trim()].filter((q) => q.length > 1))];
+  let challenges: ChallengeHit[] = [];
+
+  for (const query of queries) {
+    const data = await tikwmRequest<{ challenge_list?: ChallengeHit[] }>(
+      `${TIKWM_API}/challenge/search?keywords=${encodeURIComponent(query)}&count=10&cursor=0`,
+    );
+    challenges = data.challenge_list ?? [];
+    if (challenges.length) break;
+  }
+
+  const challenge = [...challenges].sort(
+    (a, b) =>
+      hashtagScore(b.cha_name ?? "", keyword) - hashtagScore(a.cha_name ?? "", keyword) ||
+      (b.view_count ?? 0) - (a.view_count ?? 0),
+  )[0];
+  if (!challenge?.id) return [];
+
+  const posts = await tikwmRequest<{ videos?: TikwmVideo[] }>(
+    `${TIKWM_API}/challenge/posts?challenge_id=${encodeURIComponent(challenge.id)}&count=20&cursor=0`,
+  );
+  return (posts.videos ?? []).map((video) => mapVideo(video));
 }
 
 const TIKWM_DELAY_MS = 1100;
@@ -155,7 +185,7 @@ function sleep(ms: number): Promise<void> {
 
 type ResolveHandlers = {
   onVideo?: (video: VideoSummary) => void;
-  onResults?: (videos: VideoSummary[]) => void;
+  onResults?: (videos: VideoSummary[], source?: string) => void;
 };
 
 /** TikWM free tier allows ~1 request/sec; parallel calls fail with rate limits. */
@@ -198,9 +228,11 @@ function stubToVideo(stub: VideoStub): VideoSummary {
 
 const SEARCH_CACHE_PREFIX = "peektok-search:";
 
-function readSearchCache(keyword: string): VideoSummary[] | null {
+function readSearchCache(keyword: string, provider: SearchProvider): VideoSummary[] | null {
   try {
-    const raw = sessionStorage.getItem(SEARCH_CACHE_PREFIX + keyword.toLowerCase());
+    const raw = sessionStorage.getItem(
+      `${SEARCH_CACHE_PREFIX}${provider}:${keyword.toLowerCase()}`,
+    );
     if (!raw) return null;
     const items = JSON.parse(raw) as VideoSummary[];
     return Array.isArray(items) && items.length ? items : null;
@@ -209,10 +241,14 @@ function readSearchCache(keyword: string): VideoSummary[] | null {
   }
 }
 
-function writeSearchCache(keyword: string, items: VideoSummary[]): void {
+function writeSearchCache(
+  keyword: string,
+  provider: SearchProvider,
+  items: VideoSummary[],
+): void {
   try {
     sessionStorage.setItem(
-      SEARCH_CACHE_PREFIX + keyword.toLowerCase(),
+      `${SEARCH_CACHE_PREFIX}${provider}:${keyword.toLowerCase()}`,
       JSON.stringify(items.slice(0, 24)),
     );
   } catch {
@@ -223,39 +259,46 @@ function writeSearchCache(keyword: string, items: VideoSummary[]): void {
 export async function searchKeyword(
   keyword: string,
   handlers?: ResolveHandlers,
+  provider: SearchProvider = readSearchProvider(),
 ): Promise<VideoSummary[]> {
-  let tikwmItems: VideoSummary[] = [];
-  let stubs: VideoStub[] = [];
+  let hashtagItems: VideoSummary[] = [];
+  let webItems: VideoSummary[] = [];
 
-  const publish = () => {
-    const merged = sortByRelevance(
-      dedupeVideos([...tikwmItems, ...stubs.map((stub) => stubToVideo(stub))]),
-      keyword,
-    );
+  const publish = (source: string) => {
+    const merged = dedupeVideos([
+      ...hashtagItems,
+      ...sortByRelevance(webItems, keyword),
+    ]);
     if (!merged.length) return merged;
-    writeSearchCache(keyword, merged);
-    handlers?.onResults?.(merged);
+    writeSearchCache(keyword, provider, merged);
+    handlers?.onResults?.(merged, source);
     return merged;
   };
 
-  const cached = readSearchCache(keyword);
-  if (cached?.length) handlers?.onResults?.(cached);
+  const cached = readSearchCache(keyword, provider);
+  if (cached?.length) handlers?.onResults?.(cached, provider);
 
-  const tikwmPromise = searchVideos(keyword)
-    .then((items) => {
-      if (!items.length) return;
-      tikwmItems = items;
-      publish();
-    })
-    .catch(() => undefined);
+  const useHashtag = provider === "hashtag" || provider === "auto";
+  const useWeb = provider === "web" || provider === "auto";
 
-  await findTikTokVideoStubs(keyword, 18, (next) => {
-    stubs = next;
-    publish();
-  });
+  if (useHashtag) {
+    try {
+      hashtagItems = await searchHashtagVideos(keyword);
+      if (hashtagItems.length) publish("hashtag");
+    } catch {
+      hashtagItems = [];
+    }
+  }
 
-  const listed = publish() ?? [];
-  void tikwmPromise;
+  const needWeb = useWeb && (provider === "web" || hashtagItems.length < 6);
+  if (needWeb) {
+    await findTikTokVideoStubs(keyword, 18, (next) => {
+      webItems = next.map((stub) => stubToVideo(stub));
+      publish(provider === "web" ? "web" : "auto");
+    });
+  }
+
+  const listed = publish(provider) ?? [];
   return listed.length ? listed : (cached ?? []);
 }
 
@@ -332,8 +375,9 @@ export async function searchQuery(
   }
 
   try {
-    const items = await searchKeyword(parsed.value, handlers);
-    if (items.length) return { items, source: "relevance" };
+    const provider = readSearchProvider();
+    const items = await searchKeyword(parsed.value, handlers, provider);
+    if (items.length) return { items, source: provider };
   } catch {
     /* show empty */
   }
