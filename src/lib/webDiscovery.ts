@@ -99,8 +99,11 @@ async function fetchDdgLiteMarkdown(
   const ddg = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
   const reader = `https://r.jina.ai/${ddg}`;
   const res = await fetch(reader, {
-    headers: { Accept: "text/markdown" },
-    signal: AbortSignal.timeout(25_000),
+    headers: {
+      Accept: "text/markdown",
+      "X-Timeout": "8",
+    },
+    signal: AbortSignal.timeout(9_000),
   });
   if (!res.ok) {
     throw new Error(`Web search unavailable (${res.status})`);
@@ -124,30 +127,46 @@ async function collectStubsFromQuery(
   }
 }
 
-/** Find TikTok videos via DuckDuckGo (metadata from snippets; full resolve on watch). */
+/** First page is enough to render. Extra pages fill in afterward. */
 export async function findTikTokVideoStubs(
   keyword: string,
   limit = 24,
+  onUpdate?: (stubs: VideoStub[]) => void,
 ): Promise<VideoStub[]> {
   const trimmed = keyword.trim();
-  const queries = [
-    `site:tiktok.com inurl:video ${trimmed}`,
-    `"${trimmed}" site:tiktok.com inurl:video`,
-  ];
-  const offsets = [0, 10, 20];
+  const primary = `site:tiktok.com inurl:video ${trimmed}`;
   const stubs = new Map<string, VideoStub>();
 
-  await Promise.all(
-    queries.flatMap((q) =>
-      offsets.map(async (offset) => {
-        try {
-          await collectStubsFromQuery(q, stubs, limit, offset);
-        } catch {
-          /* one page failing should not drop the rest */
-        }
-      }),
-    ),
-  );
+  const publish = () => {
+    onUpdate?.([...stubs.values()].slice(0, limit));
+  };
+
+  try {
+    await collectStubsFromQuery(primary, stubs, limit, 0);
+    publish();
+  } catch {
+    /* try a second query below */
+  }
+
+  if (stubs.size < 4) {
+    try {
+      await collectStubsFromQuery(
+        `"${trimmed}" site:tiktok.com inurl:video`,
+        stubs,
+        limit,
+        0,
+      );
+      publish();
+    } catch {
+      /* keep whatever the first page found */
+    }
+  }
+
+  if (stubs.size < limit) {
+    void collectStubsFromQuery(primary, stubs, limit, 10)
+      .then(() => publish())
+      .catch(() => undefined);
+  }
 
   return [...stubs.values()].slice(0, limit);
 }

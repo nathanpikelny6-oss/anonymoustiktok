@@ -196,59 +196,67 @@ function stubToVideo(stub: VideoStub): VideoSummary {
   };
 }
 
-async function enrichForRanking(
-  items: VideoSummary[],
-  query: string,
-  handlers?: ResolveHandlers,
-): Promise<VideoSummary[]> {
-  const ranked = sortByRelevance(items, query);
-  const head = ranked.slice(0, 8);
-  const tail = ranked.slice(8);
-  const enriched: VideoSummary[] = [];
+const SEARCH_CACHE_PREFIX = "peektok-search:";
 
-  for (let i = 0; i < head.length; i++) {
-    const current = head[i];
-    if (current.playCount != null && current.cover) {
-      enriched.push(current);
-    } else {
-      try {
-        const full = await resolveVideoUrl(current.url);
-        enriched.push({
-          ...full,
-          desc: full.desc || current.desc,
-        });
-      } catch {
-        enriched.push(current);
-      }
-      if (i < head.length - 1) await sleep(TIKWM_DELAY_MS);
-    }
-    const next = sortByRelevance([...enriched, ...head.slice(i + 1), ...tail], query);
-    handlers?.onResults?.(next);
+function readSearchCache(keyword: string): VideoSummary[] | null {
+  try {
+    const raw = sessionStorage.getItem(SEARCH_CACHE_PREFIX + keyword.toLowerCase());
+    if (!raw) return null;
+    const items = JSON.parse(raw) as VideoSummary[];
+    return Array.isArray(items) && items.length ? items : null;
+  } catch {
+    return null;
   }
+}
 
-  return sortByRelevance([...enriched, ...tail], query);
+function writeSearchCache(keyword: string, items: VideoSummary[]): void {
+  try {
+    sessionStorage.setItem(
+      SEARCH_CACHE_PREFIX + keyword.toLowerCase(),
+      JSON.stringify(items.slice(0, 24)),
+    );
+  } catch {
+    /* private mode or quota */
+  }
 }
 
 export async function searchKeyword(
   keyword: string,
   handlers?: ResolveHandlers,
 ): Promise<VideoSummary[]> {
-  const [tikwmItems, stubs] = await Promise.all([
-    searchVideos(keyword).catch(() => [] as VideoSummary[]),
-    findTikTokVideoStubs(keyword, 24).catch(() => [] as VideoStub[]),
-  ]);
+  let tikwmItems: VideoSummary[] = [];
+  let stubs: VideoStub[] = [];
 
-  const merged = dedupeVideos([
-    ...tikwmItems,
-    ...stubs.map((stub) => stubToVideo(stub)),
-  ]);
-  if (!merged.length) return [];
+  const publish = () => {
+    const merged = sortByRelevance(
+      dedupeVideos([...tikwmItems, ...stubs.map((stub) => stubToVideo(stub))]),
+      keyword,
+    );
+    if (!merged.length) return merged;
+    writeSearchCache(keyword, merged);
+    handlers?.onResults?.(merged);
+    return merged;
+  };
 
-  const initial = sortByRelevance(merged, keyword);
-  handlers?.onResults?.(initial);
+  const cached = readSearchCache(keyword);
+  if (cached?.length) handlers?.onResults?.(cached);
 
-  if (tikwmItems.length >= 8) return initial;
-  return enrichForRanking(initial, keyword, handlers);
+  const tikwmPromise = searchVideos(keyword)
+    .then((items) => {
+      if (!items.length) return;
+      tikwmItems = items;
+      publish();
+    })
+    .catch(() => undefined);
+
+  await findTikTokVideoStubs(keyword, 18, (next) => {
+    stubs = next;
+    publish();
+  });
+
+  const listed = publish() ?? [];
+  void tikwmPromise;
+  return listed.length ? listed : (cached ?? []);
 }
 
 async function loadSeedDiscover(): Promise<VideoSummary[]> {

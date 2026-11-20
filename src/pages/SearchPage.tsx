@@ -21,15 +21,17 @@ export function SearchPage() {
     setVideos([]);
     (async () => {
       try {
+        let streamed = false;
         const res = await searchQuery(q, {
           onResults: (items) => {
-            if (cancelled) return;
+            if (cancelled || !items.length) return;
+            streamed = true;
             setVideos(items);
             setLoading(false);
           },
         });
         if (cancelled) return;
-        setVideos(res.items ?? []);
+        if (!streamed) setVideos(res.items ?? []);
         setUser(res.user ?? null);
         setSource(res.source);
       } catch (err) {
@@ -54,7 +56,7 @@ export function SearchPage() {
       <h1 className="section-title">Results for “{q}”</h1>
       {loading && (
         <p className="muted" style={{ marginTop: 0 }}>
-          Searching and ranking by relevance…
+          Searching…
         </p>
       )}
       {source && !loading && (
