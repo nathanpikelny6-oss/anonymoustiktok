@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zyrox — GitHub-hosted bookmarklet</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.5;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    body { max-width: 34rem; margin: 0 auto; padding: 1.25rem; }
+    h1 { font-size: 1.35rem; }
+    .note { font-size: 0.9rem; color: #475569; }
+    a.btn {
+      display: block;
+      margin: 0.75rem 0;
+      padding: 0.85rem 1rem;
+      background: #2563eb;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      text-align: center;
+    }
+    code { font-size: 0.8rem; word-break: break-all; }
+    button {
+      width: 100%;
+      padding: 0.65rem;
+      margin-top: 0.5rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.4rem;
+      background: #fff;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <h1>Zyrox on mobile (GitHub)</h1>
+  <p class="note">
+    Script hosted in this repo. Upstream:
+    <a href="https://github.com/Zyrox-client/Zyrox-gimkit-client">Zyrox-gimkit-client</a>
+    (MIT). Loaded via <code>fetch</code> + inline injection (Gimkit CSP blocks external <code>script src</code>).
+  </p>
+  <p><strong>Script URLs</strong></p>
+  <ul>
+    <li><code id="raw-url"></code></li>
+    <li><code id="pages-url"></code></li>
+  </ul>
+  <a class="btn" id="bookmarklet" href="#">Run Zyrox (bookmarklet)</a>
+  <button type="button" id="copy">Copy bookmarklet URL</button>
+  <ol class="note">
+    <li>Save the bookmarklet (copy URL into a bookmark on mobile).</li>
+    <li>Open <a href="https://www.gimkit.com/join">gimkit.com/join</a>, tap the bookmark before joining when possible.</li>
+    <li>If load fails, Gimkit may block cross-origin <code>fetch</code>; use Tampermonkey with the raw script URL instead.</li>
+  </ol>
+  <script>
+    const OWNER = "nathanpikelny6-oss";
+    const REPO = "anonymoustiktok";
+    const BRANCH = "main";
+    const RAW =
+      "https://raw.githubusercontent.com/" +
+      OWNER +
+      "/" +
+      REPO +
+      "/" +
+      BRANCH +
+      "/public/zyrox/zyrox-client.user.js";
+    const PAGES =
+      "https://" + OWNER + ".github.io/" + REPO + "/zyrox/zyrox-client.user.js";
+
+    document.getElementById("raw-url").textContent = RAW;
+    document.getElementById("pages-url").textContent = PAGES;
+
+    const BOOKMARKLET =
+      "javascript:(function(){if(!location.hostname.endsWith('gimkit.com')){alert('Open gimkit.com/join first');return}if(window.__ZYROX_UI_MOUNTED__){alert('Zyrox already loaded');return}var u=[" +
+      JSON.stringify(RAW) +
+      "," +
+      JSON.stringify(PAGES) +
+      "];function l(i){if(i>=u.length){alert('Could not load Zyrox from GitHub');return}fetch(u[i]).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){var s=document.createElement('script');s.textContent=t;(document.head||document.documentElement).appendChild(s)}).catch(function(){l(i+1)})}l(0)})();";
+
+    document.getElementById("bookmarklet").href = BOOKMARKLET;
+    document.getElementById("copy").onclick = async function () {
+      try {
+        await navigator.clipboard.writeText(BOOKMARKLET);
+      } catch {
+        const t = document.createElement("textarea");
+        t.value = BOOKMARKLET;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand("copy");
+        t.remove();
+      }
+      this.textContent = "Copied";
+    };
+  </script>
+</body>
+</html>
