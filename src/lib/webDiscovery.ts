@@ -19,15 +19,27 @@ function stubKey(url: string): string {
   return match?.[1] ?? url;
 }
 
+function cleanSnippet(raw: string): string {
+  return raw
+    .replace(/\*\*/g, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/www\.tiktok\.com\/\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isUsefulSnippet(line: string): boolean {
+  if (line.length < 12 || line.length > 280) return false;
+  if (/tiktok\.com|uddg=|^https?:|^www\./i.test(line)) return false;
+  return true;
+}
+
 function snippetForLine(lines: string[], index: number): string {
-  for (let j = index - 1; j >= Math.max(0, index - 5); j--) {
+  for (let j = index - 1; j >= Math.max(0, index - 6); j--) {
     const line = lines[j].trim();
-    if (!line || line.startsWith("http") || line.includes("uddg=")) continue;
     const numbered = line.match(RESULT_TITLE);
-    if (numbered) return numbered[1].replace(/\*\*/g, "").trim();
-    if (line.length > 24 && line.length < 280) {
-      return line.replace(/\*\*/g, "").trim();
-    }
+    const candidate = cleanSnippet(numbered ? numbered[1] : line);
+    if (isUsefulSnippet(candidate)) return candidate;
   }
   return "";
 }
@@ -78,12 +90,17 @@ export function extractVideoUrls(text: string): string[] {
   return extractVideoStubs(text).map((s) => s.url);
 }
 
-async function fetchDdgLiteMarkdown(query: string): Promise<string> {
-  const ddg = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+async function fetchDdgLiteMarkdown(
+  query: string,
+  offset = 0,
+): Promise<string> {
+  const params = new URLSearchParams({ q: query });
+  if (offset > 0) params.set("s", String(offset));
+  const ddg = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
   const reader = `https://r.jina.ai/${ddg}`;
   const res = await fetch(reader, {
     headers: { Accept: "text/markdown" },
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(25_000),
   });
   if (!res.ok) {
     throw new Error(`Web search unavailable (${res.status})`);
@@ -95,9 +112,10 @@ async function collectStubsFromQuery(
   query: string,
   into: Map<string, VideoStub>,
   limit: number,
+  offset = 0,
 ): Promise<void> {
   if (into.size >= limit) return;
-  const md = await fetchDdgLiteMarkdown(query);
+  const md = await fetchDdgLiteMarkdown(query, offset);
   for (const stub of extractVideoStubs(md)) {
     const key = stubKey(stub.url);
     if (into.has(key)) continue;
@@ -109,24 +127,27 @@ async function collectStubsFromQuery(
 /** Find TikTok videos via DuckDuckGo (metadata from snippets; full resolve on watch). */
 export async function findTikTokVideoStubs(
   keyword: string,
-  limit = 16,
+  limit = 24,
 ): Promise<VideoStub[]> {
   const trimmed = keyword.trim();
   const queries = [
     `site:tiktok.com inurl:video ${trimmed}`,
-    `site:tiktok.com ${trimmed} video`,
-    `site:tiktok.com ${trimmed}`,
+    `"${trimmed}" site:tiktok.com inurl:video`,
   ];
-
+  const offsets = [0, 10, 20];
   const stubs = new Map<string, VideoStub>();
-  for (const q of queries) {
-    try {
-      await collectStubsFromQuery(q, stubs, limit);
-    } catch {
-      /* try next query shape */
-    }
-    if (stubs.size >= limit) break;
-  }
+
+  await Promise.all(
+    queries.flatMap((q) =>
+      offsets.map(async (offset) => {
+        try {
+          await collectStubsFromQuery(q, stubs, limit, offset);
+        } catch {
+          /* one page failing should not drop the rest */
+        }
+      }),
+    ),
+  );
 
   return [...stubs.values()].slice(0, limit);
 }

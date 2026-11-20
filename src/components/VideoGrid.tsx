@@ -25,7 +25,7 @@ export function VideoGrid({
   return (
     <div className="video-grid">
       {videos.map((v) => (
-        <VideoCard key={`${v.authorUsername}-${v.id}`} video={v} />
+        <VideoCard key={v.url || `${v.authorUsername}-${v.id}`} video={v} />
       ))}
     </div>
   );

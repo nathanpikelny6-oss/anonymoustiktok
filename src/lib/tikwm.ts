@@ -4,6 +4,7 @@ import {
   findUserVideoUrls,
   type VideoStub,
 } from "./webDiscovery";
+import { dedupeVideos, sortByRelevance } from "./relevance";
 
 const TIKWM_API = "https://www.tikwm.com/api";
 
@@ -129,7 +130,7 @@ export async function fetchUserInfo(
 export async function searchVideos(keyword: string): Promise<VideoSummary[]> {
   const params = new URLSearchParams({
     keywords: keyword,
-    count: "24",
+    count: "30",
     cursor: "0",
     web: "1",
     hd: "1",
@@ -138,18 +139,12 @@ export async function searchVideos(keyword: string): Promise<VideoSummary[]> {
     method: "POST",
     headers: { Accept: "application/json" },
     body: params,
+    signal: AbortSignal.timeout(6000),
   });
-  if (post.ok) {
-    const body = (await post.json()) as TikwmEnvelope<{ videos?: TikwmVideo[] }>;
-    if (body.code === 0 && body.data?.videos?.length) {
-      return body.data.videos.map((v) => mapVideo(v));
-    }
-  }
-
-  const data = await tikwmRequest<{ videos?: TikwmVideo[] }>(
-    `${TIKWM_API}/feed/search?keywords=${encodeURIComponent(keyword)}&count=24&cursor=0`,
-  );
-  return (data.videos ?? []).map((v) => mapVideo(v));
+  if (!post.ok) return [];
+  const body = (await post.json()) as TikwmEnvelope<{ videos?: TikwmVideo[] }>;
+  if (body.code !== 0 || !body.data?.videos?.length) return [];
+  return body.data.videos.map((v) => mapVideo(v));
 }
 
 const TIKWM_DELAY_MS = 1100;
@@ -160,6 +155,7 @@ function sleep(ms: number): Promise<void> {
 
 type ResolveHandlers = {
   onVideo?: (video: VideoSummary) => void;
+  onResults?: (videos: VideoSummary[]) => void;
 };
 
 /** TikWM free tier allows ~1 request/sec; parallel calls fail with rate limits. */
@@ -200,17 +196,59 @@ function stubToVideo(stub: VideoStub): VideoSummary {
   };
 }
 
-export async function searchVideosViaWeb(
+async function enrichForRanking(
+  items: VideoSummary[],
+  query: string,
+  handlers?: ResolveHandlers,
+): Promise<VideoSummary[]> {
+  const ranked = sortByRelevance(items, query);
+  const head = ranked.slice(0, 8);
+  const tail = ranked.slice(8);
+  const enriched: VideoSummary[] = [];
+
+  for (let i = 0; i < head.length; i++) {
+    const current = head[i];
+    if (current.playCount != null && current.cover) {
+      enriched.push(current);
+    } else {
+      try {
+        const full = await resolveVideoUrl(current.url);
+        enriched.push({
+          ...full,
+          desc: full.desc || current.desc,
+        });
+      } catch {
+        enriched.push(current);
+      }
+      if (i < head.length - 1) await sleep(TIKWM_DELAY_MS);
+    }
+    const next = sortByRelevance([...enriched, ...head.slice(i + 1), ...tail], query);
+    handlers?.onResults?.(next);
+  }
+
+  return sortByRelevance([...enriched, ...tail], query);
+}
+
+export async function searchKeyword(
   keyword: string,
   handlers?: ResolveHandlers,
 ): Promise<VideoSummary[]> {
-  const stubs = await findTikTokVideoStubs(keyword, 16);
-  const items = stubs.map((stub) => {
-    const video = stubToVideo(stub);
-    handlers?.onVideo?.(video);
-    return video;
-  });
-  return items;
+  const [tikwmItems, stubs] = await Promise.all([
+    searchVideos(keyword).catch(() => [] as VideoSummary[]),
+    findTikTokVideoStubs(keyword, 24).catch(() => [] as VideoStub[]),
+  ]);
+
+  const merged = dedupeVideos([
+    ...tikwmItems,
+    ...stubs.map((stub) => stubToVideo(stub)),
+  ]);
+  if (!merged.length) return [];
+
+  const initial = sortByRelevance(merged, keyword);
+  handlers?.onResults?.(initial);
+
+  if (tikwmItems.length >= 8) return initial;
+  return enrichForRanking(initial, keyword, handlers);
 }
 
 async function loadSeedDiscover(): Promise<VideoSummary[]> {
@@ -286,15 +324,8 @@ export async function searchQuery(
   }
 
   try {
-    const items = await searchVideos(parsed.value);
-    if (items.length) return { items, source: "tikwm-search" };
-  } catch {
-    /* TikWM search often blocked in the browser */
-  }
-
-  try {
-    const items = await searchVideosViaWeb(parsed.value, handlers);
-    if (items.length) return { items, source: "web-search" };
+    const items = await searchKeyword(parsed.value, handlers);
+    if (items.length) return { items, source: "relevance" };
   } catch {
     /* show empty */
   }

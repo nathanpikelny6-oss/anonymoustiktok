@@ -22,11 +22,10 @@ export function SearchPage() {
     (async () => {
       try {
         const res = await searchQuery(q, {
-          onVideo: (video) => {
+          onResults: (items) => {
             if (cancelled) return;
-            setVideos((prev) =>
-              prev.some((p) => p.id === video.id) ? prev : [...prev, video],
-            );
+            setVideos(items);
+            setLoading(false);
           },
         });
         if (cancelled) return;
@@ -55,14 +54,14 @@ export function SearchPage() {
       <h1 className="section-title">Results for “{q}”</h1>
       {loading && (
         <p className="muted" style={{ marginTop: 0 }}>
-          Searching the web for TikTok links…
+          Searching and ranking by relevance…
         </p>
       )}
       {source && !loading && (
         <p className="muted" style={{ marginTop: 0 }}>
           Source: {source.replace(/-/g, " ")}
-          {source === "web-search" &&
-            " (links from web search — playback loads when you open a video)"}
+          {source === "relevance" &&
+            " · sorted by relevance (caption match and popularity)"}
           {source === "seed-resolve" &&
             " (using bundled seed videos when TikWM feed is unavailable)"}
         </p>
